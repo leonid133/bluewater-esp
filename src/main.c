@@ -15,6 +15,9 @@ static const char *welcome_endpoint = "http://bluewater.k8s.hydrosphere.io/welco
 
 static int exit_flag = 0;
 static bool net_ip_acquired = false;
+static bool wifi_acquired = false;
+
+static int off_count = 0;
 
 static void ev_handler(struct mg_connection *nc, int ev, void *ev_data, void *user_data) {
   struct http_message *hm = (struct http_message *) ev_data;
@@ -71,19 +74,22 @@ static void net_cb(int ev, void *evd, void *arg) {
 #ifdef MGOS_HAVE_WIFI
 static void wifi_cb(int ev, void *evd, void *arg) {
   switch (ev) {
-    case MGOS_WIFI_EV_STA_DISCONNECTED: {      
+    case MGOS_WIFI_EV_STA_DISCONNECTED: {
+      wifi_acquired = false;      
       struct mgos_wifi_sta_disconnected_arg *da =
           (struct mgos_wifi_sta_disconnected_arg *) evd;
       LOG(LL_INFO, ("WiFi STA disconnected, reason %d", da->reason));
       break;
     }
     case MGOS_WIFI_EV_STA_CONNECTING:
+      wifi_acquired = false;  
       LOG(LL_INFO, ("WiFi STA connecting %p", arg));
       break;
     case MGOS_WIFI_EV_STA_CONNECTED:
       LOG(LL_INFO, ("WiFi STA connected %p", arg));
       break;
     case MGOS_WIFI_EV_STA_IP_ACQUIRED:
+      wifi_acquired = true;
       LOG(LL_INFO, ("WiFi STA IP acquired %p", arg));
       
       break;
@@ -111,8 +117,10 @@ static void wifi_cb(int ev, void *evd, void *arg) {
 
 static void timer_cb(void *arg) {
   
-  char buf[150];
-  sprintf(buf, "{\"sec\": \"%lu\", \"uptime\": \"%.2lf\", \"status\": \"%d\", \"sec_f\": \"%.2lf\", \"sec_s\": \"%.2lf\",  \"ram_total\": \"%lu\",  \"ram_free\" : \"%lu\" }\n",
+  if(net_ip_acquired == true && wifi_acquired == true && (unsigned long) mgos_get_free_heap_size() > 30000) {
+    off_count = 0;
+    char buf[150];
+    sprintf(buf, "{\"sec\": \"%lu\", \"uptime\": \"%.2lf\", \"status\": \"%d\", \"sec_f\": \"%.2lf\", \"sec_s\": \"%.2lf\",  \"ram_total\": \"%lu\",  \"ram_free\" : \"%lu\" }\n",
         (unsigned long)time(NULL),
           mgos_uptime(),
           mgos_gpio_read_out(mgos_sys_config_get_bw_pin_led()),
@@ -120,7 +128,7 @@ static void timer_cb(void *arg) {
           TRIG_SECOND_TIME,
           (unsigned long) mgos_get_heap_size(),
           (unsigned long) mgos_get_free_heap_size());
-  if(net_ip_acquired == true) {
+
     struct mg_connection *nc;
     nc = mg_connect_http(mgos_get_mgr(),
       ev_handler,
@@ -130,33 +138,37 @@ static void timer_cb(void *arg) {
       buf
     );
   
-    if(nc != NULL) {
-      LOG(LL_INFO,("nc is created"));
-    }
+    // if(nc != NULL) {
+    //   LOG(LL_INFO,("nc is created"));
+    // }
     mgos_shadow_updatef(0, "{ram_free: %d, uptime: %g, status: %B, first_time: %g, second_time: %g}",
       (unsigned long) mgos_get_free_heap_size(),
       mgos_uptime(),
       mgos_gpio_read_out(mgos_sys_config_get_bw_pin_led()),
       TRIG_FIRST_TIME,
       TRIG_SECOND_TIME); /* Report status */
+    // LOG(LL_INFO,(buf));
+  } else {
+    off_count = off_count + 1;
+    if(off_count>60){
+      mgos_system_restart();
+    }
   }
-
-  LOG(LL_INFO,(buf));
   (void) arg;
 }
 
 static void sensor_first(int pin, void *arg) {
-  LOG(LL_INFO,("Pin: %d", pin));
+  // LOG(LL_INFO,("Pin: %d", pin));
   TRIG_FIRST_TIME = mgos_uptime();
-  LOG(LL_INFO, ("First sensor is triggered %.2lf", TRIG_FIRST_TIME));
+  // LOG(LL_INFO, ("First sensor is triggered %.2lf", TRIG_FIRST_TIME));
   mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 0);
   (void) arg;
 }
 
 static void sensor_second(int pin, void *arg) {
-  LOG(LL_INFO,("Pin: %d", pin));
+  // LOG(LL_INFO,("Pin: %d", pin));
   TRIG_SECOND_TIME = mgos_uptime();
-  LOG(LL_INFO, ("Second sensor is triggered %.2lf", TRIG_SECOND_TIME));
+  // LOG(LL_INFO, ("Second sensor is triggered %.2lf", TRIG_SECOND_TIME));
   mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 1);
   (void) arg;
 }
