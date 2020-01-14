@@ -10,9 +10,6 @@
 static float TRIG_FIRST_TIME = 0.0;
 static float TRIG_SECOND_TIME = 0.0;
 
-// static const char *sensor_endpoint = "http://bluewater.k8s.hydrosphere.io/sensor";
-// static const char *welcome_endpoint = "http://bluewater.k8s.hydrosphere.io/welcome";
-
 static int exit_flag = 0;
 static bool net_ip_acquired = false;
 static bool wifi_acquired = false;
@@ -116,43 +113,20 @@ static void wifi_cb(int ev, void *evd, void *arg) {
 #endif /* MGOS_HAVE_WIFI */
 
 static void timer_cb(void *arg) {
-
-  if(mgos_dash_is_connected()) {
-    mgos_shadow_updatef(0, "{time: %d,ram_free: %d, uptime: %g, status: %B, first_time: %g, second_time: %g}",
+  if(net_ip_acquired == true && wifi_acquired == true) {
+    off_count = 0;
+    if(mgos_dash_is_connected()) {
+      mgos_shadow_updatef(0, "{time: %d,ram_free: %d, uptime: %g, status: %B, first_time: %g, second_time: %g}",
           (unsigned long) time(NULL),
           (unsigned long) mgos_get_free_heap_size(),
           mgos_uptime(),
           mgos_gpio_read_out(mgos_sys_config_get_bw_pin_led()),
           TRIG_FIRST_TIME,
           TRIG_SECOND_TIME); /* Report status */
-  }
-
-  if(net_ip_acquired == true && wifi_acquired == true && (unsigned long) mgos_get_free_heap_size() > 30000) {
-    // off_count = 0;
-    // char buf[150];
-    // sprintf(buf, "{\"sec\": \"%lu\", \"uptime\": \"%.2lf\", \"status\": \"%d\", \"sec_f\": \"%.2lf\", \"sec_s\": \"%.2lf\",  \"ram_total\": \"%lu\",  \"ram_free\" : \"%lu\" }\n",
-    //     (unsigned long)time(NULL),
-    //       mgos_uptime(),
-    //       mgos_gpio_read_out(mgos_sys_config_get_bw_pin_led()),
-    //       TRIG_FIRST_TIME,
-    //       TRIG_SECOND_TIME,
-    //       (unsigned long) mgos_get_heap_size(),
-    //       (unsigned long) mgos_get_free_heap_size());
-
-    // struct mg_connection *nc;
-    // nc = mg_connect_http(mgos_get_mgr(),
-    //   ev_handler,
-    //   NULL,
-    //   sensor_endpoint,
-    //   "Content-Type: application/json\r\n",
-    //   buf
-    // );
-
-    
-    off_count = 0;
+    }
   } else {
     off_count = off_count + 1;
-    if(off_count>60){
+    if(off_count>120){
       mgos_system_restart();
     }
   }
@@ -162,7 +136,6 @@ static void timer_cb(void *arg) {
 static void sensor_first(int pin, void *arg) {
   // LOG(LL_INFO,("Pin: %d", pin));
   TRIG_FIRST_TIME = mgos_uptime();
-  LOG(LL_INFO, ("First sensor is triggered %.2lf", TRIG_FIRST_TIME));
   mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 0);
   (void) arg;
 }
@@ -170,70 +143,30 @@ static void sensor_first(int pin, void *arg) {
 static void sensor_second(int pin, void *arg) {
   // LOG(LL_INFO,("Pin: %d", pin));
   TRIG_SECOND_TIME = mgos_uptime();
-  LOG(LL_INFO, ("Second sensor is triggered %.2lf", TRIG_SECOND_TIME));
   mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 1);
   (void) arg;
 }
 
 static void connected_cb(int ev, void *ev_data, void *userdata) {
-  mgos_shadow_updatef(0, "{status: %B, ram_free: %d}",
-   mgos_gpio_read_out(mgos_sys_config_get_bw_pin_led()),
-   (unsigned long) mgos_get_free_heap_size(),
-   TRIG_FIRST_TIME,
-   TRIG_SECOND_TIME); /* Report status */
   (void) ev;
   (void) ev_data;
   (void) userdata;
 }
-
-// static void delta_cb(int ev, void *ev_data, void *userdata) {
-//   struct mg_str *delta = (struct mg_str *) ev_data;
-//   int pin = mgos_sys_config_get_bw_pin_led();
-//   bool on = false;
-
-//   LOG(LL_INFO, ("GOT DELTA: [%.*s]", (int) delta->len, delta->p));
-
-//   bool reboot = false;
-//   json_scanf(delta->p, delta->len, "{reboot: %B}", &reboot);
-//   if(reboot) {
-//     mgos_system_restart();
-//   }
-
-// if (json_scanf(delta->p, delta->len, "{status: %B}", &on) != 1) {
-//   LOG(LL_ERROR, ("Unexpected delta, looking for {on: true/false}"));
-// } else if (!mgos_gpio_set_mode(pin, MGOS_GPIO_MODE_OUTPUT)) {
-//   LOG(LL_ERROR, ("mgos_gpio_set_mode(%d, GPIO_MODE_OUTPUT)", pin));
-// } else {
-//   bool inverted = true;
-//   mgos_gpio_write(pin, inverted ? !on : on); /* Turn on/off the light */
-//   mgos_shadow_updatef(0, "{status: %B}", mgos_gpio_read_out(mgos_sys_config_get_bw_pin_led())); /* Report status */
-//   LOG(LL_INFO, ("DELTA applied"));
-// }
-//   (void) ev;
-//   (void) userdata;
-// }
 
 enum mgos_app_init_result mgos_app_init(void) {
   
   LOG(LL_INFO, ("Hello from %s!\n", mgos_sys_config_get_device_id()));
     
   mgos_gpio_setup_output(mgos_sys_config_get_bw_pin_led(), 1);
-  LOG(LL_INFO, ("Led pin %d", mgos_sys_config_get_bw_pin_led()));
-
   mgos_gpio_set_button_handler(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_PULL_NONE, MGOS_GPIO_INT_EDGE_POS, mgos_sys_config_get_bw_debounce(), sensor_first,
     NULL);
-  LOG(LL_INFO, ("First Sensor pin %d", mgos_sys_config_get_bw_pin_f()));
-
   mgos_gpio_set_button_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_PULL_NONE, MGOS_GPIO_INT_EDGE_POS, mgos_sys_config_get_bw_debounce(), sensor_second,
     NULL);
-  LOG(LL_INFO, ("Second Sensor pin %d", mgos_sys_config_get_bw_pin_s()));
 
 #ifdef MGOS_HAVE_WIFI
   mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, net_cb, NULL);
   mgos_event_add_group_handler(MGOS_WIFI_EV_BASE, wifi_cb, NULL);
-  // mg_connect_http(mgos_get_mgr(), ev_handler, NULL, welcome_endpoint, "Content-Type: application/json\r\n", "{\"welcome\": \"hello\"}");
   mgos_set_timer(1000, MGOS_TIMER_REPEAT, timer_cb, NULL);
-  // mgos_event_add_handler(MGOS_SHADOW_UPDATE_DELTA, delta_cb, NULL);
   mgos_event_add_handler(MGOS_SHADOW_CONNECTED, connected_cb, NULL);
 #endif
 
