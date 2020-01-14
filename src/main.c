@@ -149,7 +149,7 @@ static void timer_cb(void *arg) {
     // );
 
     
-
+    off_count = 0;
   } else {
     off_count = off_count + 1;
     if(off_count>60){
@@ -224,7 +224,7 @@ enum mgos_app_init_result mgos_app_init(void) {
     NULL);
   LOG(LL_INFO, ("First Sensor pin %d", mgos_sys_config_get_bw_pin_f()));
 
-  mgos_gpio_set_button_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_INT_NONE, MGOS_GPIO_INT_EDGE_POS, mgos_sys_config_get_bw_debounce(), sensor_second,
+  mgos_gpio_set_button_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_PULL_NONE, MGOS_GPIO_INT_EDGE_POS, mgos_sys_config_get_bw_debounce(), sensor_second,
     NULL);
   LOG(LL_INFO, ("Second Sensor pin %d", mgos_sys_config_get_bw_pin_s()));
 
