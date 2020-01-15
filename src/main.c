@@ -16,6 +16,8 @@ static bool wifi_acquired = false;
 
 static int off_count = 0;
 
+static int timer_id = 0;
+
 static void ev_handler(struct mg_connection *nc, int ev, void *ev_data, void *user_data) {
   struct http_message *hm = (struct http_message *) ev_data;
   int connect_status;
@@ -130,20 +132,30 @@ static void timer_cb(void *arg) {
       mgos_system_restart();
     }
   }
+
+  if(TRIG_FIRST_TIME>TRIG_SECOND_TIME) {
+    mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 0);
+  } else {
+    mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 1);
+  }
   (void) arg;
 }
 
 static void sensor_first(int pin, void *arg) {
-  // LOG(LL_INFO,("Pin: %d", pin));
+  mgos_gpio_disable_int(mgos_sys_config_get_bw_pin_s());
+  mgos_clear_timer(timer_id);
   TRIG_FIRST_TIME = mgos_uptime();
-  mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 0);
+  timer_id = mgos_set_timer(1000, MGOS_TIMER_REPEAT, timer_cb, NULL); 
+  mgos_gpio_enable_int(mgos_sys_config_get_bw_pin_s());
   (void) arg;
 }
 
 static void sensor_second(int pin, void *arg) {
-  // LOG(LL_INFO,("Pin: %d", pin));
+  mgos_gpio_disable_int(mgos_sys_config_get_bw_pin_f());
+  mgos_clear_timer(timer_id);
   TRIG_SECOND_TIME = mgos_uptime();
-  mgos_gpio_write(mgos_sys_config_get_bw_pin_led(), 1);
+  timer_id = mgos_set_timer(1000, MGOS_TIMER_REPEAT, timer_cb, NULL);
+  mgos_gpio_enable_int(mgos_sys_config_get_bw_pin_f());
   (void) arg;
 }
 
@@ -158,15 +170,21 @@ enum mgos_app_init_result mgos_app_init(void) {
   LOG(LL_INFO, ("Hello from %s!\n", mgos_sys_config_get_device_id()));
     
   mgos_gpio_setup_output(mgos_sys_config_get_bw_pin_led(), 1);
-  mgos_gpio_set_button_handler(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_PULL_NONE, MGOS_GPIO_INT_EDGE_POS, mgos_sys_config_get_bw_debounce(), sensor_first,
-    NULL);
-  mgos_gpio_set_button_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_PULL_NONE, MGOS_GPIO_INT_EDGE_POS, mgos_sys_config_get_bw_debounce(), sensor_second,
-    NULL);
+  
+  mgos_gpio_set_pull(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_PULL_NONE);
+  mgos_gpio_set_pull(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_PULL_NONE);
+
+  mgos_gpio_set_int_handler(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_INT_EDGE_POS, sensor_first, NULL);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_INT_EDGE_POS, sensor_second, NULL);
+
+  mgos_gpio_enable_int(mgos_sys_config_get_bw_pin_f());
+  mgos_gpio_enable_int(mgos_sys_config_get_bw_pin_s());
+  
 
 #ifdef MGOS_HAVE_WIFI
   mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, net_cb, NULL);
   mgos_event_add_group_handler(MGOS_WIFI_EV_BASE, wifi_cb, NULL);
-  mgos_set_timer(1000, MGOS_TIMER_REPEAT, timer_cb, NULL);
+  timer_id = mgos_set_timer(1000, MGOS_TIMER_REPEAT, timer_cb, NULL);
   mgos_event_add_handler(MGOS_SHADOW_CONNECTED, connected_cb, NULL);
 #endif
 
