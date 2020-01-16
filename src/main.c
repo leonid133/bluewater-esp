@@ -174,8 +174,8 @@ enum mgos_app_init_result mgos_app_init(void) {
   mgos_gpio_set_pull(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_PULL_NONE);
   mgos_gpio_set_pull(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_PULL_NONE);
 
-  mgos_gpio_set_int_handler(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_INT_EDGE_POS, sensor_first, NULL);
-  mgos_gpio_set_int_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_INT_EDGE_POS, sensor_second, NULL);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_bw_pin_f(), MGOS_GPIO_INT_EDGE_ANY, sensor_first, NULL);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_bw_pin_s(), MGOS_GPIO_INT_EDGE_ANY, sensor_second, NULL);
 
   mgos_gpio_enable_int(mgos_sys_config_get_bw_pin_f());
   mgos_gpio_enable_int(mgos_sys_config_get_bw_pin_s());
